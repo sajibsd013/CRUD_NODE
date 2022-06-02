@@ -2,14 +2,18 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const eventSchema = require('../schemas/eventSchema');
+const userSchema = require('../schemas/userSchema');
+const checkLogin = require('../middleware/checkLogin');
 
 const Event = new mongoose.model('event', eventSchema);
+const User = new mongoose.model('user', userSchema);
 
 const router = express.Router();
 
 // get all events
-router.get('/', (req, res) => {
+router.get('/', checkLogin, (req, res) => {
     Event.find({})
+        .populate('user', 'name username -_id')
         .select({
             __v: 0,
         })
@@ -29,7 +33,7 @@ router.get('/', (req, res) => {
 });
 
 // get one event by id
-router.get('/:id', (req, res) => {
+router.get('/:id', checkLogin, (req, res) => {
     Event.findOne({ _id: req.params.id })
         .select({
             __v: 0,
@@ -44,15 +48,15 @@ router.get('/:id', (req, res) => {
 });
 
 // post event
-router.post('/', (req, res) => {
-    const newEvent = new Event(req.body);
-    newEvent.save((err) => {
-        if (err) {
-            res.status(500).json({ error: err.message });
-        } else {
-            res.status(200).json({ message: 'Event was inserted successfully!' });
-        }
-    });
+router.post('/', checkLogin, async (req, res) => {
+    const newEvent = new Event({ ...req.body, user: req.userId });
+    try {
+        const event = newEvent.save();
+        await User.updateOne({ _id: req.userId }, { $push: { event: event._id } }).clone();
+        res.status(200).json({ message: 'Event was inserted successfully!' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
 });
 
 // post multiple event
